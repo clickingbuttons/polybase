@@ -1,7 +1,5 @@
 package polygon.models;
 
-import common.OHLCV;
-
 import java.util.List;
 import java.util.Map;
 

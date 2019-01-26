@@ -1,7 +1,8 @@
 package polygon;
 
-import common.OHLCV;
+import polygon.models.OHLCV;
 import com.google.gson.Gson;
+import polygon.models.Trade;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.models.*;
@@ -13,19 +14,21 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 public class PolygonClient {
     static String baseUrl = "https://api.polygon.io/v1";
-    static String apiKey = "INSERT_KEY_HERE";
+    static String apiKey = System.getenv("POLYGON_KEY");
     static Gson gson = new Gson(); // Thread safe
     final static Logger logger = LogManager.getLogger(PolygonClient.class);
 
     private static String doRequest(String uri) {
         StringBuffer content;
         try {
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 5; i++) {
                 URL url = new URL(uri);
                 HttpURLConnection con = (HttpURLConnection) url.openConnection();
                 con.setRequestMethod("GET");
@@ -43,14 +46,17 @@ public class PolygonClient {
                 int code = con.getResponseCode();
                 if (code == 200)
                     return content.toString();
+                Thread.sleep((i + 1) * (i + 1) * 1000);
             }
 
         } catch (MalformedURLException e) {
-            logger.error(e);
+            e.printStackTrace();
         } catch (ProtocolException e) {
-            logger.error(e);
+            e.printStackTrace();
         } catch (IOException e) {
-            logger.error(e);
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
         logger.error("Retries exceeded for request {}", uri);
@@ -70,24 +76,41 @@ public class PolygonClient {
             if (r.ticks == null) // Last page
                 return trades;
             trades.addAll(r.ticks);
-            offset = r.ticks.get(r.ticks.size() - 1).t;
+            offset = r.ticks.get(r.ticks.size() - 1).timeMillis;
         }
     }
 
-    public static List<OHLCV> getHistAggForSymbol(String day, String symbol, String resolution) {
-        int limit = 50000;
-        if (resolution.compareTo("day") == 0)
-            limit = 2;
-        String url = String.format("%s/historic/agg/%s/%s?apiKey=%s&limit=%d&from=%s",
-                baseUrl, resolution, symbol, apiKey, limit, day);
+    public static List<OHLCV> getHistMinutesForSymbol(Calendar day, String symbol) {
+        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+        int limit = 60 * 24;
+        String url = String.format("%s/historic/agg/minute/%s?apiKey=%s&limit=%d&from=%s",
+                baseUrl, symbol, apiKey, limit, sdf.format(day.getTime()));
 //        logger.debug(url);
         String content = doRequest(url);
         AggResponse r = gson.fromJson(content, AggResponse.class);
         return r.ticks;
     }
 
-    public static List<String> getSymbols() {
-        List<String> symbols = new ArrayList<>();
+    public static OHLCV getHistDayForSymbol(Calendar day, String symbol) {
+        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+        Calendar nextDay = (Calendar) day.clone();
+        nextDay.add(Calendar.DATE, 1);
+
+        int limit = 60 * 60 * 24;
+        String url = String.format("%s/historic/agg/day/%s?apiKey=%s&limit=%d&from=%s&to=%s",
+                baseUrl, symbol, apiKey, limit, sdf.format(nextDay.getTime()), sdf.format(nextDay.getTime()));
+//        logger.debug(url);
+        String content = doRequest(url);
+        AggResponse r = gson.fromJson(content, AggResponse.class);
+        if (r.ticks.size() > 0)
+            return r.ticks.get(0);
+
+        return null;
+    }
+
+    public static List<Symbol> getSymbols() {
+        List<Symbol> symbols = new ArrayList<>();
 
         int perPage = 10000;
         for (int page = 1;; page++) {
@@ -96,7 +119,7 @@ public class PolygonClient {
             String content = doRequest(url);
             SymbolResponse r = gson.fromJson(content, SymbolResponse.class);
             for (Symbol s : r.symbols) {
-                symbols.add(s.symbol);
+                symbols.add(s);
             }
 
             if (r.symbols.size() < perPage) // Last page

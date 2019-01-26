@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="AggTest" tests="1" skipped="1" failures="0" errors="0" timestamp="2019-01-25T19:38:05" hostname="mini2" time="2424.742">
+  <properties/>
+  <testcase name="minuteAggTest" classname="AggTest" time="2424.742">
+    <skipped/>
+  </testcase>
+  <system-out><![CDATA[2019-01-25 14:38:05.707 INFO [AggTest.minuteAggTest(AggTest.java:103)] - Removed 840 weird symbols
+2019-01-25 14:38:05.735 INFO [AggTest.minuteAggTest(AggTest.java:106)] - Symbols: [EQUEY, FWDD, AFNL, APRRF, GPP, LGDOF, NSKFF, PETZC, ITSHF]
+2019-01-25 14:38:05.736 INFO [AggTest.minuteAggTest(AggTest.java:109)] - Testing EQUEY on 2019-01-18
+2019-01-25 14:38:15.306 INFO [AggTest.minuteAggTest(AggTest.java:109)] - Testing FWDD on 2019-01-18
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

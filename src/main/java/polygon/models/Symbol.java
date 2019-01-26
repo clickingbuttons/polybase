@@ -10,4 +10,8 @@ public class Symbol {
     public String exchSym;
     public Boolean active;
     public String url;
+
+    public String toString() {
+        return String.format("%s (%s) %s %b", symbol, exchSym, type, active);
+    }
 }
