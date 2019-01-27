@@ -2,6 +2,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import polygon.PolygonClient;
 import polygon.models.Symbol;
+import hbase.HBaseWriter;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
@@ -15,25 +16,30 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
-    final static int cores = Runtime.getRuntime().availableProcessors();
+    final static int threadCount = 50;
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     final static PolygonClient client = new PolygonClient();
 
 
     static void backfillDay(Calendar day, List<String> symbols) {
+        if (day.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+            return;
+        }
         AtomicInteger count = new AtomicInteger(0);
-        logger.info("Backfilling {} ({} symbols)", sdf.format(day.getTime()), symbols.size());
+        AtomicInteger success = new AtomicInteger(0);
+        logger.info("Backfilling {} symbols on {} using {} threads", symbols.size(), sdf.format(day.getTime()), threadCount);
         List<Runnable> tasks = new ArrayList<>();
 
         for (String sym : symbols) {
-            tasks.add(new BackfillSymbolTask(day, sym, count, symbols.size()));
+            tasks.add(new BackfillSymbolTask(day, sym, count, success, symbols.size()));
         }
 
-        ExecutorService pool = Executors.newFixedThreadPool(cores * 2);
+        // Only about 1/4 of 30770 the symbols have trades and will actually use CPU
+        // The rest are just doing HTTP requests to check
+        ExecutorService pool = Executors.newFixedThreadPool(threadCount);
         for (Runnable r : tasks) {
             pool.execute(r);
         }
@@ -44,6 +50,7 @@ public class Main {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+        logger.info("Backfilled {} / {} symbols on {}", success.get(), symbols.size(), sdf.format(day.getTime()));
     }
 
     public static void saveSymbols(List<String> symbols) {
@@ -68,16 +75,25 @@ public class Main {
 
     private static boolean isBadSymbol(Symbol s) {
         String type = s.type == null ? "" : s.type.toLowerCase();
-        if (s.symbol.endsWith("USDT")
-            || s.symbol.matches("^.*[^a-zA-Z].*$") // These don't work with Polygon most of the time anyways...
-            || type.contains("warrant")
-            || type.contains("rights")
-            || type.contains("issued")) {
+        if (s.symbol.length() > 5
+                || s.symbol.matches("^.*[^a-zA-Z].*$") // These don't work with Polygon most of the time anyways...
+                || type.contains("warrant")
+                || type.contains("rights")
+                || type.contains("issued")) {
             logger.debug("Removed {}", s);
             return true;
         }
 
         return false;
+    }
+
+    private static void initTables() {
+        HBaseWriter.createTable("trade", "t");
+        HBaseWriter.createTable("agg1s", "a");
+        HBaseWriter.createTable("agg1m", "a");
+        HBaseWriter.createTable("agg5m", "a");
+        HBaseWriter.createTable("agg1h", "a");
+        HBaseWriter.createTable("agg1d", "a");
     }
 
     private static void backfill(Calendar from, Calendar to) {
@@ -100,12 +116,15 @@ public class Main {
 //        List<String> strings = symbols.stream().map(s -> s.symbol).collect(Collectors.toList());
 //        saveSymbols(strings);
 //        logger.info("Removed {} weird symbols. {} left.", prevSize - symbols.size(), symbols.size());
-//        logger.debug("Symbols: {}", symbols);
+//        logger.debug("Symbols: {}", strings);
 
         List<String> strings = loadSymbols();
         while (to.after(from)) {
+            long startTime = System.currentTimeMillis();
             backfillDay(to, strings);
             to.add(Calendar.DATE, -1);
+            long duration = (System.currentTimeMillis() - startTime);
+            logger.info("{} took {} seconds", sdf.format(to.getTime()), duration / 1000);
         }
     }
 
@@ -113,7 +132,7 @@ public class Main {
         Calendar from, to;
         try {
             Date fromDate = sdf.parse("2019-01-02");
-            Date toDate = sdf.parse("2019-01-24"); // new Date()
+            Date toDate = sdf.parse("2019-01-25"); // new Date()
 
             from = Calendar.getInstance();
             from.setTime(fromDate);
@@ -126,13 +145,10 @@ public class Main {
         }
 
         long startTime = System.currentTimeMillis();
-        HBaseWriter.getInstance().createTable("trade", "tf");
-        HBaseWriter.getInstance().createTable("agg1m", "af");
-        HBaseWriter.getInstance().createTable("agg5m", "af");
-        HBaseWriter.getInstance().createTable("agg1h", "af");
-        HBaseWriter.getInstance().createTable("agg1d", "af");
+        initTables();
         backfill(from, to);
         long duration = (System.currentTimeMillis() - startTime);
-        logger.info("Took {} seconds.\n", duration / 1000);
+        logger.info("Took {} seconds", duration / 1000);
+        HBaseWriter.close();
     }
 }

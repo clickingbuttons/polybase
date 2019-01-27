@@ -1,21 +1,25 @@
 ## Trade Table
-Already solved: https://cloud.google.com/bigtable/docs/schema-design-time-series
+See: https://cloud.google.com/bigtable/docs/schema-design-time-series
 
-KEY: AAPL#1547816737396#streaknum
+KEY:
+symbol  | timestamp  | streaknum
+========|============|===========
+5c (5)  | long (8)   | short (2)
+
 
 cf| column query    | value
 ==|=================|====================
-MD| SYMBOL          | AAPL
-MD| TIMESTAMP       | 1547816737396
-MD| PRICE           | 155.85
-MD| SIZE            | 10
-MD| EXCHANGE        | 8
-MD| FLAGS           | 825373494
+t | PRICE           | 155.85
+t | SIZE            | 10
+t | FLAGS           | 825373494
 
 1d = 20,487,467 rows in 25mins
 
 ## Aggregate Tables
-KEY: AAPL#1547824740000
+KEY:
+symbol  | timestamp
+========|===========
+5c (5)  | long (8)
 
 cf| column query    | value
 ==|=================|====================

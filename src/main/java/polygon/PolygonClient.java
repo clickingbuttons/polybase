@@ -1,5 +1,6 @@
 package polygon;
 
+import com.google.common.util.concurrent.RateLimiter;
 import polygon.models.OHLCV;
 import com.google.gson.Gson;
 import polygon.models.Trade;
@@ -24,13 +25,17 @@ public class PolygonClient {
     static String apiKey = System.getenv("POLYGON_KEY");
     static Gson gson = new Gson(); // Thread safe
     final static Logger logger = LogManager.getLogger(PolygonClient.class);
+    // Not ideal, but we start getting 500s
+    final static RateLimiter rateLimiter = RateLimiter.create(300);
 
     private static String doRequest(String uri) {
         StringBuffer content;
-        try {
-            for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 10; i++) {
+            try {
+                rateLimiter.acquire();
                 URL url = new URL(uri);
                 HttpURLConnection con = (HttpURLConnection) url.openConnection();
+                con.setRequestProperty("Accept", "application/json");
                 con.setRequestMethod("GET");
                 con.setDoOutput(true);
 
@@ -47,16 +52,12 @@ public class PolygonClient {
                 if (code == 200)
                     return content.toString();
                 Thread.sleep((i + 1) * (i + 1) * 1000);
+            } catch (MalformedURLException|ProtocolException|InterruptedException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                if (!e.getMessage().contains("500"))
+                    e.printStackTrace();
             }
-
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-        } catch (ProtocolException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
         }
 
         logger.error("Retries exceeded for request {}", uri);
@@ -72,6 +73,8 @@ public class PolygonClient {
                     baseUrl, symbol, day, apiKey, offset);
             // logger.debug(url);
             String content = doRequest(url);
+            if (content == null)
+                return null;
             TradeResponse r = gson.fromJson(content, TradeResponse.class);
             if (r.ticks == null) // Last page
                 return trades;
@@ -88,6 +91,8 @@ public class PolygonClient {
                 baseUrl, symbol, apiKey, limit, sdf.format(day.getTime()));
 //        logger.debug(url);
         String content = doRequest(url);
+        if (content == null)
+            return null;
         AggResponse r = gson.fromJson(content, AggResponse.class);
         return r.ticks;
     }
@@ -117,6 +122,8 @@ public class PolygonClient {
             String url = String.format("%s/meta/symbols?apiKey=%s&sort=symbol&perpage=%d&page=%d",
                     baseUrl, apiKey, perPage, page);
             String content = doRequest(url);
+            if (content == null)
+                return null;
             SymbolResponse r = gson.fromJson(content, SymbolResponse.class);
             for (Symbol s : r.symbols) {
                 symbols.add(s);

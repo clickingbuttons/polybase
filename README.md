@@ -1,4 +1,6 @@
 TODO:
 - [x] tests for offline aggregation
-- [ ] write to hbase
+- [x] write to hbase
 - [ ] add hbase+snappy installation guide
+
+- [ ] test hbase reads...
