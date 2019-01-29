@@ -22,10 +22,8 @@ public class HBaseWriter {
     static Connection connection;
     static {
         Configuration config = HBaseConfiguration.create();
-        config.set("hbase.zookeeper.quorum", "127.0.0.1");
+        config.set("hbase.zookeeper.quorum", "localhost");
         config.setInt("hbase.zookeeper.property.clientPort", 2181);
-//        config.set("hbase.master", "localhost:60000");
-//        config.set("zookeeper.znode.parent", "/");
         try {
             HBaseAdmin.available(config);
             connection = ConnectionFactory.createConnection(config);
@@ -43,15 +41,14 @@ public class HBaseWriter {
             ColumnFamilyDescriptor cf = ColumnFamilyDescriptorBuilder
                     .newBuilder(Bytes.toBytes(familyName))
                     .setCompressionType(Compression.Algorithm.SNAPPY)
-                    .setDataBlockEncoding(DataBlockEncoding.PREFIX)
-                    .setCompactionCompressionType(Compression.Algorithm.SNAPPY)
+                    .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+//                    .setCompactionCompressionType(Compression.Algorithm.SNAPPY)
                     .build();
 
             TableDescriptor table = TableDescriptorBuilder
                     .newBuilder(TableName.valueOf(tableName))
                     .setColumnFamily(cf)
                     .setDurability(Durability.SKIP_WAL)
-                    .setCompactionEnabled(true)
                     .build();
 
             connection.getAdmin().createTable(table);
@@ -79,15 +76,15 @@ public class HBaseWriter {
             // Long.MAX_VALUE = 9,223,372,036,854,775,807 = 19 digits
             // 9,999,999,999,999 = Saturday, November 20, 2286 = 13 digits
             key.put(Bytes.toBytes(String.format("%13d", t.timeMillis)));
-//            key.put(Bytes.toBytes(t.timeMillis));
+//            key.put(Bytes.toBytes(t.timeMillis)); // = 8 bytes
             key.put(Bytes.toBytes(streakCounter));
             Put p = new Put(key.array());
 
             p.setTimestamp(t.timeMillis);
             p.addColumn(cf,
                     HColumnEnum.TRADE_COL_EXCHANGE.bytes, Bytes.toBytes(Short.parseShort(t.exchange)));
-            p.addColumn(cf,
-                    HColumnEnum.TRADE_COL_SYMBOL.bytes, Bytes.toBytes(symbol));
+//            p.addColumn(cf,
+//                    HColumnEnum.TRADE_COL_SYMBOL.bytes, Bytes.toBytes(symbol));
             p.addColumn(cf,
                     HColumnEnum.TRADE_COL_SIZE.bytes, Bytes.toBytes(t.size));
             p.addColumn(cf,
@@ -121,8 +118,8 @@ public class HBaseWriter {
             Put p = new Put(key.array());
 
             p.setTimestamp(c.timeMillis);
-            p.addColumn(cf,
-                    HColumnEnum.AGG_COL_SYMBOL.bytes, Bytes.toBytes(symbol));
+//            p.addColumn(cf,
+//                    HColumnEnum.AGG_COL_SYMBOL.bytes, Bytes.toBytes(symbol));
             p.addColumn(cf,
                     HColumnEnum.AGG_COL_OPEN.bytes, Bytes.toBytes(c.open));
             p.addColumn(cf,

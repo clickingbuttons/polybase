@@ -41,4 +41,6 @@ aggPeriod | rows          | per day (/17)
 1d        |     207,411   |     12,200
 
 All in 16GB...
-4.6GB in 6 days
+
+From 01-01-2019 to 01-25-2019 w/ string key + prefix (24 days, 18 trading): 24GB
+From 01-01-2019 to 01-28-2019 w/ string key + fast diff (27 days, 19 trading): 17GB

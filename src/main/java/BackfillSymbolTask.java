@@ -8,8 +8,8 @@ import polygon.PolygonClient;
 import hbase.HBaseWriter;
 
 import java.text.SimpleDateFormat;
-import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 
 public class BackfillSymbolTask implements Runnable {
@@ -17,7 +17,6 @@ public class BackfillSymbolTask implements Runnable {
     private String symbol;
     private BackfillDayStats stats;
     private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-    private final PolygonClient client = new PolygonClient();
     final static Logger logger = LogManager.getLogger(BackfillSymbolTask.class);
 
     public BackfillSymbolTask(Calendar day, String symbol, BackfillDayStats stats) {
@@ -35,7 +34,7 @@ public class BackfillSymbolTask implements Runnable {
     }
 
     public void run() {
-        List<Trade> trades = client.getTradesForSymbol(sdf.format(day.getTime()), symbol);
+        List<Trade> trades = PolygonClient.getTradesForSymbol(sdf.format(day.getTime()), symbol);
         // Sort trades by timestamp
         trades.sort((a, b) -> a.timeMillis < b.timeMillis ? 1 : 0);
         int numTrades = trades.size();
@@ -57,33 +56,38 @@ public class BackfillSymbolTask implements Runnable {
         }
         else {
 //            logger.warn("No trades for {} on {}", symbol, sdf.format(day.getTime()));
-            candles1m = client.getHistMinutesForSymbol(day, symbol);
+            candles1m = PolygonClient.getHistMinutesForSymbol(day, symbol);
             if (candles1m.size() > 0) stats.symbolsWith1m.add(symbol);
-            candle1d = client.getHistDayForSymbol(day, symbol);
+            candle1d = PolygonClient.getHistDayForSymbol(day, symbol);
             if (candle1d != null) stats.symbolsWith1d.add(symbol);
         }
         List<OHLCV> candles5m = OHLCVAggregator.aggregate(candles1m, 1000 * 60 * 5);
         List<OHLCV> candles1h = OHLCVAggregator.aggregate(candles5m, 1000 * 60 * 60);
 
-        HBaseWriter writer = new HBaseWriter();
         if (numTrades > 0) {
-            writer.writeTrades(trades, symbol);
+            HBaseWriter.writeTrades(trades, symbol);
+            stats.curNumTrades.addAndGet(trades.size());
             trades.clear();
         }
         if (candles1s != null) {
-            writer.writeCandles(candles1s, symbol, "1s");
+            HBaseWriter.writeCandles(candles1s, symbol, "1s");
+            stats.curNum1s.addAndGet(candles1s.size());
             candles1s.clear();
         }
         if (candles1m.size() > 0) {
-            writer.writeCandles(candles1m, symbol, "1m");
-            writer.writeCandles(candles5m, symbol, "5m");
-            writer.writeCandles(candles1h, symbol, "1h");
+            HBaseWriter.writeCandles(candles1m, symbol, "1m");
+            stats.curNum1m.addAndGet(candles1m.size());
             candles1m.clear();
+            HBaseWriter.writeCandles(candles5m, symbol, "5m");
+            stats.curNum5m.addAndGet(candles5m.size());
             candles5m.clear();
+            HBaseWriter.writeCandles(candles1h, symbol, "1h");
+            stats.curNum1h.addAndGet(candles1h.size());
             candles1h.clear();
         }
         if (candle1d != null) {
-            writer.writeCandles(Arrays.asList(candle1d), symbol, "1d");
+            HBaseWriter.writeCandles(Collections.singletonList(candle1d), symbol, "1d");
+            stats.curNum1d.incrementAndGet();
         }
 
         logDone();

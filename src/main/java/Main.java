@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
-    final static int threadCount = 50;
+    final static int threadCount = 100;
     final static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     final static PolygonClient client = new PolygonClient();
 
@@ -58,7 +58,7 @@ public class Main {
         }
     }
 
-    public static List<String> loadSymbols() {
+    static List<String> loadSymbols() {
         try {
             String content = new String(Files.readAllBytes(Paths.get("symbols.txt")));
             return new java.util.ArrayList<>(Arrays.asList(content.split(",")));
@@ -116,18 +116,21 @@ public class Main {
         List<String> strings = loadSymbols();
 
         BackfillAllStats allStats = new BackfillAllStats();
-        while (to.after(from)) {
-            logger.info("Backfilling {} symbols on {}", strings.size(), sdf.format(to.getTime()));
+        for (Calendar it = (Calendar) to.clone(); it.after(from); it.add(Calendar.DATE, -1)) {
+            if (it.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+                continue;
+            }
+            logger.info("Backfilling {} symbols on {} using {} threads",
+                    strings.size(), sdf.format(it.getTime()), threadCount);
 
             long startTime = System.currentTimeMillis();
-            BackfillDayStats dayStats = backfillDay(to, strings);
+            BackfillDayStats dayStats = backfillDay(it, strings);
             dayStats.timeElapsed = System.currentTimeMillis() - startTime;
 
-            logger.info(dayStats);
             allStats.add(dayStats);
-
-            to.add(Calendar.DATE, -1);
+            logger.info(dayStats);
         }
+        logger.info(allStats);
     }
 
     public static void main(String args[]) {
@@ -135,7 +138,7 @@ public class Main {
         Calendar to = Calendar.getInstance();
         try {
             Date fromDate = sdf.parse("2019-01-01");
-            Date toDate = sdf.parse("2019-01-25"); // new Date()
+            Date toDate = sdf.parse("2019-01-28"); // new Date()
 
             from.setTime(fromDate);
             to.setTime(toDate);
