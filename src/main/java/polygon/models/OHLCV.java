@@ -18,13 +18,14 @@ public class OHLCV implements Comparable<OHLCV> {
     @SerializedName("t")
     public long timeMillis;
 
+    private SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+
+
     public OHLCV(long t) {
         timeMillis = t;
     }
 
     public String toString() {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-
         return String.format("%d (%s)\t\to: %4.3f h: %4.3f l: %4.3f c: %4.3f v: %d",
                 timeMillis,
                 sdf.format(new Date(timeMillis)),

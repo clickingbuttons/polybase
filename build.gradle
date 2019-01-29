@@ -8,7 +8,7 @@ sourceCompatibility = 1.8
 mainClassName = "Main"
 
 // We allocate and then set to null a lot of memory
-applicationDefaultJvmArgs = []
+applicationDefaultJvmArgs = ["-Xms4G", "-Xmx4G"]
 
 repositories {
     mavenCentral()

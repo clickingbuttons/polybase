@@ -15,7 +15,6 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
     final static Logger logger = LogManager.getLogger(Main.class);
@@ -24,21 +23,16 @@ public class Main {
     final static PolygonClient client = new PolygonClient();
 
 
-    static void backfillDay(Calendar day, List<String> symbols) {
-        if (day.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
-            return;
-        }
-        AtomicInteger count = new AtomicInteger(0);
-        AtomicInteger success = new AtomicInteger(0);
-        logger.info("Backfilling {} symbols on {} using {} threads", symbols.size(), sdf.format(day.getTime()), threadCount);
+    static BackfillDayStats backfillDay(Calendar day, List<String> symbols) {
+        BackfillDayStats res = new BackfillDayStats(day, symbols.size());
         List<Runnable> tasks = new ArrayList<>();
 
         for (String sym : symbols) {
-            tasks.add(new BackfillSymbolTask(day, sym, count, success, symbols.size()));
+            tasks.add(new BackfillSymbolTask(day, sym, res));
         }
 
-        // Only about 1/4 of 30770 the symbols have trades and will actually use CPU
-        // The rest are just doing HTTP requests to check
+        // Only about 1/4 of 30770 symbols have trades and will actually use CPU,
+        // and the rest are just doing HTTP requests to check
         ExecutorService pool = Executors.newFixedThreadPool(threadCount);
         for (Runnable r : tasks) {
             pool.execute(r);
@@ -50,7 +44,8 @@ public class Main {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        logger.info("Backfilled {} / {} symbols on {}", success.get(), symbols.size(), sdf.format(day.getTime()));
+
+        return res;
     }
 
     public static void saveSymbols(List<String> symbols) {
@@ -119,29 +114,34 @@ public class Main {
 //        logger.debug("Symbols: {}", strings);
 
         List<String> strings = loadSymbols();
+
+        BackfillAllStats allStats = new BackfillAllStats();
         while (to.after(from)) {
+            logger.info("Backfilling {} symbols on {}", strings.size(), sdf.format(to.getTime()));
+
             long startTime = System.currentTimeMillis();
-            backfillDay(to, strings);
+            BackfillDayStats dayStats = backfillDay(to, strings);
+            dayStats.timeElapsed = System.currentTimeMillis() - startTime;
+
+            logger.info(dayStats);
+            allStats.add(dayStats);
+
             to.add(Calendar.DATE, -1);
-            long duration = (System.currentTimeMillis() - startTime);
-            logger.info("{} took {} seconds", sdf.format(to.getTime()), duration / 1000);
         }
     }
 
     public static void main(String args[]) {
-        Calendar from, to;
+        Calendar from = Calendar.getInstance();
+        Calendar to = Calendar.getInstance();
         try {
-            Date fromDate = sdf.parse("2019-01-02");
+            Date fromDate = sdf.parse("2019-01-01");
             Date toDate = sdf.parse("2019-01-25"); // new Date()
 
-            from = Calendar.getInstance();
             from.setTime(fromDate);
-
-            to = Calendar.getInstance();
             to.setTime(toDate);
         } catch (ParseException e) {
             e.printStackTrace();
-            return;
+            System.exit(-1);
         }
 
         long startTime = System.currentTimeMillis();

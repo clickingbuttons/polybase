@@ -11,33 +11,27 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class BackfillSymbolTask implements Runnable {
     private Calendar day;
     private String symbol;
-    private AtomicInteger progress;
-    private AtomicInteger success;
-    private int total;
+    private BackfillDayStats stats;
     private final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
     private final PolygonClient client = new PolygonClient();
     final static Logger logger = LogManager.getLogger(BackfillSymbolTask.class);
 
-    public BackfillSymbolTask(Calendar day, String symbol, AtomicInteger progress, AtomicInteger success, int total) {
+    public BackfillSymbolTask(Calendar day, String symbol, BackfillDayStats stats) {
         this.day = (Calendar) day.clone();
         this.symbol = symbol;
-        this.progress = progress;
-        this.success = success;
-        this.total = total;
+        this.stats = stats;
     }
 
-    public void logDone(int numTrades) {
-        int num = progress.incrementAndGet();
-        if (num == numTrades || num % 500 == 0 && num != 0) {
-            logger.info("{} Finished {} / {} ({} good)", sdf.format(day.getTime()), progress, total, success);
+    public void logDone() {
+        int num = stats.curNumSymbols.getAndIncrement();
+        if (num % 500 == 0 && num != 0) {
+            logger.info("{} Finished {} / {} ({} have trades)",
+                    sdf.format(day.getTime()), stats.curNumSymbols, stats.numSymbols, stats.symbolsWithTrades.size());
         }
-        if (numTrades > 0)
-            logger.debug("{} {} Got {} trades ({} / {})", sdf.format(day.getTime()), symbol, numTrades, progress, total);
     }
 
     public void run() {
@@ -51,7 +45,10 @@ public class BackfillSymbolTask implements Runnable {
         OHLCV candle1d;
 
         if (numTrades > 0) {
-            success.incrementAndGet();
+            stats.symbolsWithTrades.add(symbol);
+            logger.debug("{} {} had {} trades from {} to {}",
+                    sdf.format(day.getTime()), symbol, numTrades,
+                    trades.get(0).timeMillis, trades.get(trades.size() - 1).timeMillis);
             // The Magic
             candles1s = TradeAggregator.aggregate(trades, 1000);
 
@@ -61,7 +58,9 @@ public class BackfillSymbolTask implements Runnable {
         else {
 //            logger.warn("No trades for {} on {}", symbol, sdf.format(day.getTime()));
             candles1m = client.getHistMinutesForSymbol(day, symbol);
+            if (candles1m.size() > 0) stats.symbolsWith1m.add(symbol);
             candle1d = client.getHistDayForSymbol(day, symbol);
+            if (candle1d != null) stats.symbolsWith1d.add(symbol);
         }
         List<OHLCV> candles5m = OHLCVAggregator.aggregate(candles1m, 1000 * 60 * 5);
         List<OHLCV> candles1h = OHLCVAggregator.aggregate(candles5m, 1000 * 60 * 60);
@@ -87,6 +86,6 @@ public class BackfillSymbolTask implements Runnable {
             writer.writeCandles(Arrays.asList(candle1d), symbol, "1d");
         }
 
-        logDone(numTrades);
+        logDone();
     }
 }

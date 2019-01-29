@@ -22,15 +22,15 @@ public class HBaseWriter {
     static Connection connection;
     static {
         Configuration config = HBaseConfiguration.create();
-//        config.setInt("hbase.zookeeper.property.clientPort", 2181);
+        config.set("hbase.zookeeper.quorum", "127.0.0.1");
+        config.setInt("hbase.zookeeper.property.clientPort", 2181);
 //        config.set("hbase.master", "localhost:60000");
-//        config.set("hbase.zookeeper.quorum", "127.0.0.1");
 //        config.set("zookeeper.znode.parent", "/");
         try {
             HBaseAdmin.available(config);
             connection = ConnectionFactory.createConnection(config);
         } catch (MasterNotRunningException e) {
-            logger.error("HBase/Zookeeper is not running");
+            logger.error("HBase and/or Zookeeper is not running");
             System.exit(-1);
         } catch (IOException e) {
             logger.error("Problem connecting to HBase: {}", e);
@@ -43,13 +43,15 @@ public class HBaseWriter {
             ColumnFamilyDescriptor cf = ColumnFamilyDescriptorBuilder
                     .newBuilder(Bytes.toBytes(familyName))
                     .setCompressionType(Compression.Algorithm.SNAPPY)
-                    .setDataBlockEncoding(DataBlockEncoding.FAST_DIFF)
+                    .setDataBlockEncoding(DataBlockEncoding.PREFIX)
+                    .setCompactionCompressionType(Compression.Algorithm.SNAPPY)
                     .build();
 
             TableDescriptor table = TableDescriptorBuilder
                     .newBuilder(TableName.valueOf(tableName))
                     .setColumnFamily(cf)
                     .setDurability(Durability.SKIP_WAL)
+                    .setCompactionEnabled(true)
                     .build();
 
             connection.getAdmin().createTable(table);
@@ -72,9 +74,12 @@ public class HBaseWriter {
             if (lastMillis == t.timeMillis) streakCounter++;
             else streakCounter = 0;
 
-            ByteBuffer key = ByteBuffer.allocate(5 + 8 + 2);
+            ByteBuffer key = ByteBuffer.allocate(5 + 13 + 2);
             key.put(symbolBytes);
-            key.put(Bytes.toBytes(t.timeMillis));
+            // Long.MAX_VALUE = 9,223,372,036,854,775,807 = 19 digits
+            // 9,999,999,999,999 = Saturday, November 20, 2286 = 13 digits
+            key.put(Bytes.toBytes(String.format("%13d", t.timeMillis)));
+//            key.put(Bytes.toBytes(t.timeMillis));
             key.put(Bytes.toBytes(streakCounter));
             Put p = new Put(key.array());
 
@@ -109,9 +114,10 @@ public class HBaseWriter {
 
         List<Put> puts = new ArrayList<>(candles.size());
         for (OHLCV c : candles) {
-            ByteBuffer key = ByteBuffer.allocate(5 + 8);
+            ByteBuffer key = ByteBuffer.allocate(5 + 13);
             key.put(symbolBytes);
-            key.put(Bytes.toBytes(c.timeMillis));
+            key.put(Bytes.toBytes(String.format("%13d", c.timeMillis)));
+//            key.put(Bytes.toBytes(c.timeMillis));
             Put p = new Put(key.array());
 
             p.setTimestamp(c.timeMillis);
