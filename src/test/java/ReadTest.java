@@ -31,7 +31,7 @@ public class ReadTest {
         try {
             HBaseAdmin.available(config);
             Connection connection = ConnectionFactory.createConnection(config);
-            agg1s = connection.getTable(TableName.valueOf("agg1s"));
+            agg1s = connection.getTable(TableName.valueOf("agg1d"));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -41,8 +41,8 @@ public class ReadTest {
             Calendar from = Calendar.getInstance();
             Calendar to = Calendar.getInstance();
             try {
-                Date fromDate = sdf.parse("2019-01-03");
-                Date toDate = sdf.parse("2019-01-03");
+                Date fromDate = sdf.parse("2019-01-25");
+                Date toDate = sdf.parse("2019-01-28");
 
                 from.setTime(fromDate);
                 to.setTime(toDate);
@@ -53,15 +53,15 @@ public class ReadTest {
             from.set(Calendar.HOUR_OF_DAY, 4);
             to.set(Calendar.HOUR_OF_DAY, 18);
 
-            byte[] symbolBytes = Bytes.toBytes(String.format("%5s", "AAPL"));
-            ByteBuffer fromKey = ByteBuffer.allocate(5 + 8 + 2);
+            byte[] symbolBytes = Bytes.toBytes(String.format("%5s", "GME"));
+            ByteBuffer fromKey = ByteBuffer.allocate(5 + 13 + 2);
             fromKey.put(symbolBytes);
-            fromKey.put(Bytes.toBytes(from.getTimeInMillis()));
+            fromKey.put(Bytes.toBytes(String.format("%13d", from.getTimeInMillis())));
             fromKey.put(Bytes.toBytes((short) 0));
 
-            ByteBuffer toKey = ByteBuffer.allocate(5 + 8 + 2);
+            ByteBuffer toKey = ByteBuffer.allocate(5 + 13 + 2);
             toKey.put(symbolBytes);
-            toKey.put(Bytes.toBytes(to.getTimeInMillis()));
+            toKey.put(Bytes.toBytes(String.format("%13d", to.getTimeInMillis())));
             toKey.put(Bytes.toBytes(Short.MAX_VALUE));
 
 
@@ -75,9 +75,9 @@ public class ReadTest {
                 for (Result result = scanner.next(); (result != null); result = scanner.next()) {
                     byte[] key = result.getRow();
 
-                    assertEquals(13, key.length);
+//                    assertEquals(20, key.length);
                     String symbol = Bytes.toString(Arrays.copyOfRange(key, 0, 5));
-                    long timestamp = Bytes.toLong(Arrays.copyOfRange(key, 5, 13));
+                    long timestamp = Long.parseLong(Bytes.toString(Arrays.copyOfRange(key, 5, 5 + 13)));
 
                     OHLCV res = new OHLCV(timestamp);
                     res.open = Bytes.toDouble(result.getValue(HColumnEnum.AGG_COL_FAMILY.bytes,
@@ -92,7 +92,7 @@ public class ReadTest {
                             HColumnEnum.AGG_COL_VOLUME.bytes));
 
                     count++;
-//                    logger.info("{}: {}", symbol, res);
+                    logger.info("{}: {}", symbol, res);
                 }
                 scanner.close();
                 agg1s.close();

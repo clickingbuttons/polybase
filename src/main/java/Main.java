@@ -117,7 +117,12 @@ public class Main {
 
         BackfillAllStats allStats = new BackfillAllStats();
         for (Calendar it = (Calendar) to.clone(); it.after(from); it.add(Calendar.DATE, -1)) {
-            if (it.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
+            /* Quinton - Polygon.io [2019-01-30]
+            The exchanges play test data during the weekends. We had been broadcasting it for users to test on the
+            weekend, however it causes problems like this ^ we will no longer be broadcasting the exchange
+            data on weekends. */
+            if (it.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY ||
+                    it.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
                 continue;
             }
             logger.info("Backfilling {} symbols on {} using {} threads",
